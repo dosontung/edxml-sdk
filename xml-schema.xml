@@ -1,0 +1,532 @@
+<!-- 
+
+                RelaxNG schema of the EDXML file format
+  
+                             version 1.7.1
+  
+      Copyright by D.H.J. Takken (d.h.j.takken@xs4all.nl) 2009 - 2012
+                  
+                         all rights reserved
+
+            This schema is still a draft and subject to change!
+
+  CHANGELOG
+
+  12-22-09  Added "reporter-short" and "reporter-long" attributes
+            to "eventtype".
+            Increased max allowed name lengths from 32 to 40 characters
+            Update various name patterns to force lowercase names
+            Change the format of acquisition date of data sources
+  12-09-09  Added a "requires-utf" attribute to "objecttype".
+            Renamed relation "strength" to "confidence" and renamed 
+            "entity-definition-strength" to "entity-confidence".
+  10-28-09  The length of the description of property relations is now limited
+            Added a "description" attribute to sources
+            Added a "date-acquired" attribute to sources
+  10-27-09  Added "type" and "description" attributes to property relation definition.
+            Added "reversed-storage" attribute to objecttype definition.
+            The length of the "interpreter" attribute of translations is now limited
+            Source URLs are no longer fixed length. It's still recommended
+            to keep it within sane limits though. :)
+  05-26-10  Changed relation type "extra" to "inter".
+            Allow eventtypes to have zero relations
+            Added "phonetic-search" attribute to objecttype
+  11-10-10  Increased relation description length to 255 characters
+            Introduced the 'fuzzy-matching' attribute for object types
+  01-03-11  Introduced 'unique' attribute for event properties
+            Introduced 'merge' attribute for event properties
+            Extended relation type to include a small predicate that
+            characterizes the relation type in more detail.
+  03-15-11  Introduced 'number:bigint' data type
+            Introduced 'binstring' data type
+            Introduced 'hyperlink' data type
+            Introduced 'boolean' data type
+            Introduced 'classlist' eventtype attribute
+  09-02-11  Added 'parent' and 'child' relation types
+            Added 'decimal' and 'enum' data types
+            Added signed versions of numerical data types
+  01-15-12  Simplified schema, allow only one definitions section.
+  04-14-12  Removed phonetic-search attribute, it was no longer used.
+-->
+
+<element name="events" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <!--
+    Definitions section, which defines:
+
+    * Event Types
+    * Object Types
+    * Sources
+
+  -->
+  <element name="definitions">
+    <element name="eventtypes">
+      <zeroOrMore>
+        <element name="eventtype">
+          <attribute name="name">
+            <data type="token">
+              <param name="maxLength">40</param>
+              <param name="pattern">[a-z0-9-]*</param>
+            </data>
+          </attribute>
+          <attribute name="description">
+            <data type="string"><param name="maxLength">128</param></data>
+          </attribute>
+          <!--
+            The "classlist" attribute can be used to categorize eventtypes into named
+            classes. A class name is a short string like "financial", "client information",
+            "communication", ... You can assign multiple classes to a single eventtype
+            by creating a comma-seperated list of class names in a single string, like:
+
+            "communication,email"
+
+          -->
+          <attribute name="classlist">
+            <data type="string"></data>
+          </attribute>
+          <!--
+            Reporters are strings that can be used to generate human readable
+            descriptions of each event individually. It contains keywords which
+            can be replaced with the values of event properties. Example:
+
+            "Phone call between [[caller]] and [[callee]]"
+
+            The above reporter will work when the event has properties named
+            "caller" and "callee".
+
+            There is a long and a short version. The short version is meant for
+            brief one-liners, the long version for report-style descriptions.
+
+            Refer to EDXML manual for full syntax description.
+          -->
+          <attribute name="reporter-short">
+            <data type="string"></data>
+          </attribute>
+          <attribute name="reporter-long">
+            <data type="string"></data>
+          </attribute>
+          <!--
+            Property definition section. Defines
+            the properties of each event type.
+          -->
+          <element name="properties">
+            <oneOrMore>
+              <element name="property">
+                <attribute name="object-type">
+                  <data type="token"></data>
+                </attribute>
+                <attribute name="name">
+                  <data type="token">
+                    <param name="maxLength">64</param>
+                    <param name="pattern">[a-z0-9-]*</param>
+                  </data>
+                </attribute>
+                <attribute name="description">
+                  <data type="normalizedString"><param name="maxLength">128</param></data>
+                </attribute>
+                <!--
+                  Optionally, you can indicate if a property is
+                  unique or not. When a property is unique, there
+                  cannot be more than one event of the same eventtype
+                  and source referring to the same object of this property.
+                  Systems can use this attribute to merge 'colliding' events,
+                  where an event collision is defined as multiple events
+                  referring to the same object of a unique property.
+
+                  If an event type defines multiple unique properties, two
+                  events are considered to collide when ALL of its unique
+                  properties are equal.
+                -->
+                <optional>
+                  <attribute name="unique">
+                    <choice>
+                      <value type="string">true</value>
+                      <value type="string">false</value>
+                    </choice>
+                  </attribute>
+                </optional>
+                <!--
+                  Events that have 'unique = true' properties should also
+                  define the 'merge' attribute for each of its properties. The
+                  merge attribute indicates how systems should merge events in
+                  case of an event collision. Several different merge strategies can
+                  be indicated:
+
+                  'drop':    Only the property value of the first handled event
+                             is kept. All other values will be dropped.
+                  'add':     All property values will be added to the event.
+                  'replace': Only the property value of the last handled event
+                             is kept. All other values will be dropped.
+                  'min':     In case of numerical objecttypes, only the lowest
+                             value is kept.
+                  'max':     In case of numerical objecttypes, only the highest
+                             value is kept.
+                  'match':   Property values of all events must match. This strategy
+                             can only be used for properties that have unique = true.
+
+                -->
+                <optional>
+                  <attribute name="merge">
+                    <choice>
+                      <value type="string">drop</value>
+                      <value type="string">add</value>
+                      <value type="string">replace</value>
+                      <value type="string">min</value>
+                      <value type="string">max</value>
+                      <value type="string">match</value>
+                    </choice>
+                  </attribute>
+                </optional>
+                <!--
+                  Optionally, you can indicate if a property can
+                  be interpreted as being a property of an
+                  entity (like a person) or not. For example,
+                  a name is a valid property of a person, while
+                  a frequency normally is not.
+                -->
+                <optional>
+                  <attribute name="defines-entity">
+                    <choice>
+                      <value type="string">true</value>
+                      <value type="string">false</value>
+                    </choice>
+                  </attribute>
+                </optional>
+                <optional>
+                  <!--
+                    Indicates how strongly or weakly this property
+                    is bound to a specific entity. For example, a
+                    social security number is quite strong, while a
+                    family name is weaker.
+
+                    (Floating point number between 0.0 and 1.0)
+                  -->
+                  <attribute name="entity-confidence">
+                    <data type="float"></data>
+                  </attribute>
+                </optional>
+              </element>
+            </oneOrMore>
+          </element>
+          <!--
+            Defines relations between properties. Used to describe
+            the relations, dependencies and logical structure of the
+            data set. Example: For all events of type "telephone call",
+            the caller and callee are related to each other, because
+            of the nature of the event type.
+          -->
+          <element name="relations">
+            <zeroOrMore>
+              <element name="relation">
+                <attribute name="property1">
+                  <data type="token"></data>
+                </attribute>
+                <attribute name="property2">
+                  <data type="token"></data>
+                </attribute>
+                  <!--
+                     Description can be used to describe how the two properties
+                     are related.
+                  -->
+                <attribute name="description">
+                  <data type="normalizedString">
+                    <param name="maxLength">255</param>
+                  </data>
+                </attribute>
+                  <!--
+                     Type indicates in what way the two properties relate
+                     to each other. It is a string that exists of two parts seperated
+                     by a colon. The string in the left part may contain one of the strings
+
+                     "intra"
+                     "inter"
+                     "parent"
+                     "child"
+                     "other"
+
+                     which indicate the relation type in a generic way. An "intra" relation
+                     associates two different properties of the same entity. For example,
+                     when person A sends an email message to person B, one could relate the
+                     name of person A to the email adress of person A. This is a typical
+                     "intra" relation. Relating the email adresses of A and B should
+                     be done using a "inter" relation, connecting one entity to another.
+
+                     A "parent" or "child" relation can be used to indicate a hierarchical
+                     relationship between properties.
+
+                     The part of the type string to the right of the colon should contain
+                     a very short characterization of the type of relation, describing how
+                     the two properties are related. Examples:
+
+                     "intra:makes use of"
+                     "intra:is called"
+                     "intra:is acquainted with"
+                     "other:is part of"
+                     "inter:communicates with"
+
+                     The type attribute can be used in software to discover new properties
+                     of existing entities, discover new entities in a dataset or figure out
+                     if two entities are somehow related or not.
+                  -->
+                <attribute name="type">
+                  <data type="normalizedString">
+                    <param name="maxLength">32</param>
+                    <param name="pattern">(intra|inter|parent|child|other):.+</param>
+                  </data>
+                </attribute>
+                  <!--
+                    Indicates the odds of the relation being real, when
+                    the associated event is seen _once_.
+                    Example: The caller and callee in a single telephone call
+                    will usually be related in some way. Unless the caller
+                    dialled the wrong number. Let's say the odds of a real
+                    actual relation is 0.9. A computer program that analyzes
+                    a set of events may notice that A and B have called each other
+                    10 times in a certain period of time. The odds of an actual
+                    relationship can now be calculated as being:
+                       1.0 - (1.0 - 0.9)^10 = 0.999.
+
+                    (Floating point number between 0.0 and 1.0)
+                  -->
+                <attribute name="confidence">
+                  <data type="float"></data>
+                </attribute>
+              </element>
+            </zeroOrMore>
+          </element>
+        </element>
+      </zeroOrMore>
+    </element>
+      <!--
+        Defines the object types that are used to define event
+        properties. These allow data of the same kind to be
+        related to each other. Example: In a "telephone call" event,
+        the phone number of the caller and callee are two different
+        event properties, but both are telephone numbers. Storing this
+        simple fact allows systems to relate phone numbers of callers
+        to those of callees.
+      -->
+    <element name="objecttypes">
+      <oneOrMore>
+        <element name="objecttype">
+          <attribute name="data-type">
+            <!--
+              Data types are provided to allow efficient
+              storage in databases. These event types should
+              be straight forward to map to the available data types
+              of which ever database that might be used.
+
+              Refer to EDXML manual for details about each datatype.
+            -->
+            <choice>
+              <value type="string">number:tinyint</value>
+              <value type="string">number:tinyint:signed</value>
+              <value type="string">number:smallint</value>
+              <value type="string">number:smallint:signed</value>
+              <value type="string">number:mediumint</value>
+              <value type="string">number:mediumint:signed</value>
+              <value type="string">number:int</value>
+              <value type="string">number:int:signed</value>
+              <value type="string">number:bigint</value>
+              <value type="string">number:bigint:signed</value>
+              <value type="string">number:float</value>
+              <value type="string">number:float:signed</value>
+              <value type="string">number:double</value>
+              <value type="string">number:double:signed</value>
+              <value type="string">string</value>
+              <value type="string">binstring</value>
+              <value type="string">hyperlink</value>
+              <value type="string">ip</value>
+              <value type="string">timestamp</value>
+              <value type="string">boolean</value>
+              <data type="token">
+                <param name="pattern">enum:.*</param>
+              </data>
+              <data type="token">
+                <param name="pattern">number:decimal:[0-9]+:[0-9]+</param>
+              </data>
+              <data type="token">
+                <param name="pattern">number:decimal:[0-9]+:[0-9]+:signed</param>
+              </data>
+            </choice>
+          </attribute>
+          <attribute name="name">
+            <data type="token">
+              <param name="maxLength">40</param>
+              <param name="pattern">[a-z0-9-]*</param>
+            </data>
+          </attribute>
+          <attribute name="description">
+            <data type="string"><param name="maxLength">128</param></data>
+          </attribute>
+            <!--
+              For some object types, it can be useful to allow them to
+              be searched in a fuzzy manner, like names.
+
+              Using the 'fuzzy-matching' attribute, you can indicate how
+              the object type can be fuzzy matched. There are three types
+              of fuzzy matching defined. You can match phonetically (sounds
+              like), match the head of the string or match the tail of the
+              string.
+
+              Matching phonetically can be indicated by the 'phonetic'
+              keyword. Matching the head or tail can be indicated by using
+              the syntax '[n:]' or '[:n]', in that order. Here, 'n' is the
+              number of charaters that should be matched.
+
+              Some examples of the 'fuzzy-matching' attribute:
+
+              "phonetic"
+              "[3:]"
+              "[:8]"
+
+            -->
+          <optional>
+            <attribute name="fuzzy-matching">
+              <data type="token">
+                <param name="pattern">(phonetic)|(\[[0-9]{1,2}:\])|(\[:[0-9]{1,2}\])</param>
+              </data>
+            </attribute>
+          </optional>
+            <!--
+              In case the data is of type "string", additional properties
+              must be given.
+
+              The size attribute gives the maximum string length. This allows
+              database systems to use fast fixed length storage. When the string
+              length is omitted, the length will be regarded as variable.
+
+              The reversed-storage attribute can be used to indicate that database
+              systems should store the string in reversed order. For certain kinds
+              of strings, this increases index cardinality, which can improve
+              query performance quite a bit.
+
+              The requires-utf attribute indicates if the string requires UTF-8
+              encoding or not. UTF encoding does imply a performance hit in most
+              systems, do not use it unless you have to.
+            -->
+          <optional>
+            <attribute name="size">
+              <data type="int"></data>
+            </attribute>
+          </optional>
+          <optional>
+            <attribute name="reversed-storage">
+              <choice>
+                <value type="string">true</value>
+                <value type="string">false</value>
+              </choice>
+            </attribute>
+          </optional>
+          <optional>
+            <attribute name="requires-utf">
+              <choice>
+                <value type="string">true</value>
+                <value type="string">false</value>
+              </choice>
+            </attribute>
+          </optional>
+        </element>
+      </oneOrMore>
+    </element>
+    <!--
+      Sources indicate where the data of a given event originated from.
+    -->
+    <element name="sources">
+      <oneOrMore>
+        <element name="source">
+          <attribute name="source-id">
+            <data type="token"></data>
+          </attribute>
+          <attribute name="url">
+            <data type="token"></data>
+          </attribute>
+          <attribute name="description">
+            <data type="normalizedString"><param name="maxLength">128</param></data>
+          </attribute>
+
+          <!--
+            attribute "date-acquired" indicates when the data was obtained.
+
+            format: yyyymmdd
+          -->
+
+          <attribute name="date-acquired">
+            <data type="normalizedString">
+              <param name="maxLength">8</param>
+              <param name="pattern">[0-9]{8}</param>
+            </data>
+          </attribute>
+        </element>
+      </oneOrMore>
+    </element>
+  </element>
+  <zeroOrMore>
+    <!-- 
+      End of Definitions secion, start of Data section.
+      
+      An event group is a set of events of the same event type, 
+      and originating from the same source.
+    -->
+    <element name="eventgroups">
+      <zeroOrMore>
+        <element name="eventgroup">
+          <attribute name="event-type">
+            <data type="token"></data>
+          </attribute>
+          <attribute name="source-id">
+            <data type="token"></data>
+          </attribute>
+          <zeroOrMore>
+            <element name="event">
+    
+              <!-- 
+               For each defined event property, objects can be
+               defined below. Defining objects for every event
+               property is NOT mandatory.
+              -->
+	      
+              <oneOrMore>
+                <element name="object">
+                  <attribute name="property">
+                    <data type="token"></data>
+                  </attribute>
+                  <attribute name="value">
+                    <data type="string"></data>
+                  </attribute>
+                </element>
+              </oneOrMore>
+              <zeroOrMore>
+                <!-- 
+                  The Content element stores texts of arbitrary length.
+                  These are typically the content of an email message,
+                  the message text of a system log entry, and so on.
+                 -->
+                <element name="content">
+                  <text/>
+                </element>
+              </zeroOrMore>
+              <zeroOrMore>
+                <!-- 
+                  This element holds a translation of the Content element.
+                  The target language is indicated by a ISO 639-1 code.
+                 -->
+                <element name="translation">
+                  <attribute name="language">
+                    <data type="string">
+                      <param name="maxLength">2</param>
+                      <param name="pattern">[a-z]{2}</param>
+                    </data>
+                  </attribute>
+                  <attribute name="interpreter">
+                    <data type="string"><param name="maxLength">40</param></data>
+                  </attribute>
+                  <text/>
+                </element>
+              </zeroOrMore>
+            </element>
+          </zeroOrMore>
+        </element>
+      </zeroOrMore>
+    </element>
+  </zeroOrMore>
+</element>
